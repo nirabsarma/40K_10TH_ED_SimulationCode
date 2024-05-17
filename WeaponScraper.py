@@ -2,9 +2,7 @@
 
 import numpy as np
 import pandas as pd
-from pypdf import PdfReader
-import re
-
+import easyocr
 # Basic Idea Here:
 
 # I want to extract the unique ranged and melee weapons and their stats for each faction. 
@@ -29,9 +27,9 @@ import re
 fff = "SpaceMarines"
 # for faction in factions: 
 doc_path = r"C:\\Users\\Chonky Boi\\Documents\\Python Scripts\\Datasets\\40K_Datasheets\\" + fff + ".pdf" #faction
-csv_path = r"C:\\Users\\Chonky Boi\\Documents\\Python Scripts\\Datasets\\40K_Datasheets\\good_ones\\" + fff + ".csv"
-
-pattern = "(?<=RANGED WEAPONS RANGE A BS S AP D)[\s\S]*?(?=MELEE WEAPONS RANGE A WS S AP D)"
+csv_path = r"C:\\Users\\Chonky Boi\\Documents\\Python Scripts\\Datasets\\40K_Datasheets\\Basic_Unit_Stats\\" + fff + ".csv"
+pattern_stats = r'\b\d+\b|\b\d+[+]\b|\bD\d+[+]\d*\b|\bD\d+\b|\b\d+[+]\d*\b'
+pattern_names = r'(.*?)\s\d+["\s]'
 
 
 
@@ -48,47 +46,24 @@ names = pd.Series.to_list(names)
 
 # Process matches
 
-def weapons_detec(pattern, text): 
+def weapons_detec(pattern_stats, pattern_names, text): 
 
-    matches = re.findall(pattern, text)
+    names = re.findall(pattern_names, text)
+    print(names)
+    stats = re.findall(pattern_stats, text)
     objects_list = []
-    for match in matches:
-        # Split each match into lines
-        lines = match.strip().split('\n')
+    
+    counter = 0
+    
+    for name in names:
+        
         # Initialize a dictionary to store object statistics
-        object_stats = {}
-        # Iterate over lines to extract statistics
-        for line in lines:
-            # Split line by whitespace
-            stats = line.split()
-            # Check if there are statistics
-            print("last 6 elements of stats",stats[-6:])
-            if len(stats) >= 2:
-                # Extract name and statistics
-                if 'FLAMER' in stats:
-                    print('Flamer alert? Or maybe extra newline found')
-                else:
-                    name = ' '.join(stats[:-6])  # Object name (excluding the last 6 elements which are statistics)
-                    stats_values = stats[-6:]     # Object statistics
-                
-                if i == 100:
-                    print(text)
-                    print(name)
-                print("pre-mod",stats_values)
-                stats_values[0] = str(stats_values[0])[0:2]
-                stats_values[2] = str(stats_values[2])[0]
-                #remove stats values 
-                print("post mod",stats_values)
-                # Store name and statistics in the dictionary
-                object_stats[name.strip()] = stats_values
+        object_stats = {name : stats[6*counter:(6*counter + 6) ]}
+        counter+=1
+        # print(object_stats)
+       
         # Append the dictionary to the objects list
         objects_list.append(object_stats)
-
-    # # Print the list of objects
-    # for i, obj in enumerate(objects_list, 1):
-    #     print(f"Object {i}:")
-    #     for name, stats in obj.items():
-    #         print(f"Name: {name}, Statistics: {stats}")
 
     return objects_list
 
@@ -108,8 +83,8 @@ for i in range(6,len(reader.pages)):
     text = page.extract_text(extraction_mode = "plain")
 
 
-    wpon_stats = weapons_detec(pattern, text)
-    print(wpon_stats)
+    wpon_stats = weapons_detec(pattern_stats, pattern_names, text)
+
     if len(wpon_stats) > 0:
 
     # print(wpon_stats)
@@ -118,9 +93,15 @@ for i in range(6,len(reader.pages)):
         print(wpons)
         print(stats)
         # print(stats[0])
-        for i in range(0,len(wpons)):
-            stats[i].insert(0, wpons[i])
-            wpon_list.append(stats[i])
+        for j in range(0,len(wpons)):
+            stats[j].insert(0, wpons[j])
+            wpon_list.append(stats[j])
+
+    
+    if i == 100:
+        print([text])
+        raise Exception("Something broken here")
+
         # print(wpon_list)
     # if len(wpon_list[-1] < )
     # by the end of this loop, we've got all the weapons on the page into the list.
