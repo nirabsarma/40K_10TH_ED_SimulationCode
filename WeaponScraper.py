@@ -1,8 +1,8 @@
 # Scraping Datasheets for WH40K experiment
 
-import numpy as np
 import pandas as pd
-import easyocr
+import pymupdf
+import re
 # Basic Idea Here:
 
 # I want to extract the unique ranged and melee weapons and their stats for each faction. 
@@ -23,101 +23,221 @@ import easyocr
 
 
 
-
-fff = "SpaceMarines"
+fff = "Necrons"
 # for faction in factions: 
-doc_path = r"C:\\Users\\Chonky Boi\\Documents\\Python Scripts\\Datasets\\40K_Datasheets\\" + fff + ".pdf" #faction
-csv_path = r"C:\\Users\\Chonky Boi\\Documents\\Python Scripts\\Datasets\\40K_Datasheets\\Basic_Unit_Stats\\" + fff + ".csv"
-pattern_stats = r'\b\d+\b|\b\d+[+]\b|\bD\d+[+]\d*\b|\bD\d+\b|\b\d+[+]\d*\b'
-pattern_names = r'(.*?)\s\d+["\s]'
+main_path = r"C:\\Users\\Chonky Boi\\Documents\\Python Scripts\\Datasets\\40K_Datasheets\\" 
+doc_path = main_path + fff + ".pdf" #faction
+csv_path = main_path + "Basic_Unit_Stats\\" + fff + ".csv"
+new_path = main_path + fff
 
 
-
-reference_table = pd.read_csv(csv_path)
-print(reference_table.head(4))
-
-## __________ EXTRACTION CODE
-
-
-reader = PdfReader(doc_path)
-
-names = reference_table['Name'] # returns a pd series
-names = pd.Series.to_list(names)
-
-# Process matches
-
-def weapons_detec(pattern_stats, pattern_names, text): 
-
-    names = re.findall(pattern_names, text)
-    print(names)
-    stats = re.findall(pattern_stats, text)
-    objects_list = []
+try:
+    # Open the PDF file
+    doc = pymupdf.open(doc_path)
     
-    counter = 0
+    # Check if the document is encrypted
+    if doc.is_encrypted:
+        print("The document is encrypted.")
+    else:
+        print("The document is not encrypted.")
     
-    for name in names:
+    # Check the number of pages
+    num_pages = doc.page_count
+    print(f"Number of pages in the document: {num_pages}")
+    
+    if num_pages > 0:
+        # Try to load the first page
+        page_number = 0  # First page index is 0
+        try:
+            page = doc.load_page(page_number)
+            print(f"Successfully loaded page {page_number + 1}.")
+        except Exception as e:
+            print(f"Failed to load page {page_number + 1}: {e}")
+    else:
+        print("The document has no pages.")
         
-        # Initialize a dictionary to store object statistics
-        object_stats = {name : stats[6*counter:(6*counter + 6) ]}
-        counter+=1
-        # print(object_stats)
-       
-        # Append the dictionary to the objects list
-        objects_list.append(object_stats)
-
-    return objects_list
+except Exception as e:
+    print(f"An error occurred while opening the document: {e}")
 
 
-
-
-
-
+page_ids = []
 wpon_list = []
 
-for i in range(6,len(reader.pages)):
+pattern1 = r'\n'
+pattern2 = r'RANGED WEAPONS'
+pattern3 = r'MELEE WEAPONS'
+
+def get_page_size(doc, page_number):
+    # Load the page
+    page = doc.load_page(page_number)
     
-    page = reader.pages[i]
- 
- 
-    print("Page Number", i )
-    text = page.extract_text(extraction_mode = "plain")
-
-
-    wpon_stats = weapons_detec(pattern_stats, pattern_names, text)
-
-    if len(wpon_stats) > 0:
-
-    # print(wpon_stats)
-        wpons = list(wpon_stats[0].keys())
-        stats = list(wpon_stats[0].values())
-        print(wpons)
-        print(stats)
-        # print(stats[0])
-        for j in range(0,len(wpons)):
-            stats[j].insert(0, wpons[j])
-            wpon_list.append(stats[j])
-
+    # Get the MediaBox of the page
+    media_box = page.mediabox
     
-    if i == 100:
-        print([text])
-        raise Exception("Something broken here")
+    # Extract the width and height
+    width = media_box[2] - media_box[0]
+    height = media_box[3] - media_box[1]
+    
+    return width, height
 
-        # print(wpon_list)
-    # if len(wpon_list[-1] < )
-    # by the end of this loop, we've got all the weapons on the page into the list.
-    # but we still need to add to add in the unit check
+width, height = get_page_size(doc,6)
+
+
+# Extraction Starts here
+if width/height > height/width:
+    print("Wide page")
+    print('width/height',width/height )
+    print('height/width',height/width )
+    
+    for i in range(6,len(doc)-1):
+
+        buggered_lists = []
+
+        page = doc.load_page(i)  # number of page
+
+        text = page.get_text()
         
-    # if the weapon is in the list, add the name of the unit to the relevant weapon unit list
-    # if the weapon is not in the list, then add the weapon in
+
+        mod_text = re.sub(pattern1,' ',text) # removing newlines
+        
+        # print(text)
+
+        index1 = text.find(pattern2)
+        index2 = text.find(pattern3) # TODO: add conditional if there's no melee weapons, need new indexer?
+
+        # if index2 == -1:
+
+        
+        stats_and_names = text[ index1 + len(pattern2): index2]
+        
+        #split entries by newlines into list?
+        stats_and_names = stats_and_names.split('\n')
+        
+        
+        if i%2 == 0:
+            
+            
+            print(f"\n USEFUL DATA page {i}\n ")
+
+            print(f'stats and names \n\n', stats_and_names)
+            print(f"\n\nLength of stats and names data extracted" , len(stats_and_names))
+
+            stats_and_names = stats_and_names[7:-1] #remove extra bit
+            print(stats_and_names)
+
+          
+            print('length of loop',len(stats_and_names)/7)
+                        
+            if len(stats_and_names)%7 != 0: # detecting problem loops and investigating if there's a pattern
+                print('Problem in the string exists. Data extracted here:')
+                buggered_lists.append([page,stats_and_names])
+
+            else:
+                for j in range(0,int(len(stats_and_names)/7)):
+                    wpon_list.append(stats_and_names[j*7:j*7+7])
 
 
-print(wpon_list)
+            print(f'\n\n saved data \n\n')
+            print(wpon_list)
+            print(f'\n\n')
+
+            print(f"Problematic lists and their page in first col \n\n")
 
 
-# now making this into a pd dataframe
+            for i in range(len(buggered_lists)):
+                a = buggered_lists[i]
+                print(buggered_lists[i])
+                print(f'length of loop \n',len(a[1])/7)
+                print(f'on page \n', a[0])
+            
 
-table_headers = ["Name" , "Range", "A", "WS", "S", "AP", "P","Related Unit"]
+        else:
+            print(f'\n\n BS PAGE DETECTED: page {i}\n')
+        
+
+        
+        #TODO: 
+
+        # Some weapons got that extra \n in front of the attribute list. need to figure out how to
+        # 1. detect that
+        # 2. squish the names together
+        # 3. append
+
+        # save data into csv
+        # figure out how to add unit names to each piece of data? probably by extracting text from the beginning of each page that includes unit name, and then appending it to each row that's generated.
+
+else:  
+    print('long page')
     
-df = pd.DataFrame(wpon_stats, columns = table_headers)
-print(df.head(10))
-df.to_csv(r"C:\\Users\\Chonky Boi\\Documents\\Python Scripts\\Datasets\\40K_Datasheets\\" + fff + ".csv", index = False)
+    buggered_lists = []
+    for i in range(6,len(doc)-1): # range(6,len(doc)-1):
+        
+        page = doc.load_page(i)  # number of page
+
+        text = page.get_text()
+
+        # print("Extracted text", text)
+        mod_text = re.sub(pattern1,' ',text) # removing newlines
+        
+        # print(text)
+
+        index1 = text.find(pattern2)
+        index2 = text.find(pattern3)# TODO: add conditional if there's no melee weapons, need new indexer?
+        
+        stats_and_names = text[ index1 + len(pattern2): index2]
+        
+        #split entries by newlines into list?
+        stats_and_names = stats_and_names.split('\n')
+        
+        
+        
+        print(f"\n USEFUL DATA page {i}\n ")
+
+        print(f'stats and names \n\n', stats_and_names)
+        print(f"\n\nLength of stats and names data extracted" , len(stats_and_names))
+
+        stats_and_names = stats_and_names[7:-1] #remove extra bit
+        
+
+        
+        print('length of loop',len(stats_and_names)/7)
+        #the loop is ideally a multiple of 7 long.
+
+
+        if len(stats_and_names)%7 != 0: # detecting problem loops and investigating if there's a pattern
+            print('Problem in the string exists. Data extracted here:')
+            buggered_lists.append([page,stats_and_names])
+
+        else:
+            for j in range(0,int(len(stats_and_names)/7)):
+                wpon_list.append(stats_and_names[j*7:j*7+7])
+            
+        
+
+
+        # The bullshit lists are gonna be saved here into a separate csv.
+        # gonna edit that in post
+        print(f"Problematic lists and their page in first col \n\n")
+
+        for i in range(len(buggered_lists)):
+            a = buggered_lists[i]
+            print(buggered_lists[i])
+            print(f'length of loop \n',len(a[1])/7)
+            print(f'on page \n', a[0])
+        
+print(wpon_list)
+doc.close()
+
+
+
+#converting document to pages
+
+## __________ EXTRACTION CODE
+# wpon_list = []
+
+
+# table_headers = ["Name" , "Range", "A", "WS", "S", "AP", "P","Related Unit"]
+    
+# df = pd.DataFrame(wpon_stats, columns = table_headers)
+# print(df.head(10))
+# df.to_csv(r"C:\\Users\\Chonky Boi\\Documents\\Python Scripts\\Datasets\\40K_Datasheets\\" + fff + ".csv", index = False)
